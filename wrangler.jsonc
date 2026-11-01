@@ -1,0 +1,47 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "finance-tracker",
+	// Personal account only; never the work accounts.
+	"account_id": "2534622452ada6561d0d44f4c6da7152",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-10-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"vars": {
+		// Exact URL pasted into claude.ai; every token is bound to it.
+		"MCP_RESOURCE": "https://finance-tracker.edwardjoshua-diesta.workers.dev/mcp",
+		// Numeric GitHub user id allowed to sign in, until sign-up opens (#21).
+		"ALLOWED_GITHUB_ID": "99942301",
+		// Defaults for users who haven't set their own (ADR 0003).
+		"DEFAULT_TIMEZONE": "Asia/Manila",
+		"DEFAULT_CURRENCY": "PHP"
+	},
+	"kv_namespaces": [
+		{
+			"binding": "OAUTH_KV",
+			"id": "57ffcefb1df4488b84497a599ab57947"
+		}
+	],
+	"observability": {
+		"enabled": true
+	},
+	"dev": {
+		"port": 8788
+	},
+	"secrets": {
+		"required": [
+			"GITHUB_CLIENT_ID",
+			"GITHUB_CLIENT_SECRET",
+			"COOKIE_ENCRYPTION_KEY"
+		]
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "finance-tracker",
+			"database_id": "d8c7708d-48bd-4d24-be16-d3fdf4db5159",
+			"migrations_dir": "migrations"
+		}
+	]
+}
