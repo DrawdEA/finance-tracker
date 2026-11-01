@@ -19,8 +19,8 @@ A Transaction where money goes out.
 _Avoid_: Expense, purchase, payment
 
 **Category**:
-A label for what a Transaction or Estimate was for or came from (e.g. food, transport), chosen from a fixed list the user owns.
-_Avoid_: Tag, type
+A label for what a Transaction or Estimate was for or came from (e.g. food, transport), chosen from a flat list the user owns. Each Category belongs to either Income or Spending; Transfers have none. "Other" is a Category; Unaccounted is not.
+_Avoid_: Tag, type, subcategory
 
 **Transfer**:
 Money moved from one Account to another; neither Income nor Spending.
@@ -29,7 +29,7 @@ _Avoid_: Move, top-up
 ### Where money sits
 
 **Account**:
-A real place money physically sits (e.g. a bank account, GCash, cash in a wallet), with a Balance the user can check.
+A real place money physically sits (e.g. a bank account, GCash, a savings pocket with its own Balance, cash in a wallet), with a Balance the user can check. Closed after a Balance check of zero; its history stays.
 _Avoid_: Basket, wallet, envelope, fund
 
 **Balance**:
