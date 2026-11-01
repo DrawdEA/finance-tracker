@@ -19,7 +19,7 @@ A Transaction where money goes out.
 _Avoid_: Expense, purchase, payment
 
 **Category**:
-A label for what a Transaction or Estimate was for or came from (e.g. food, transport), chosen from a flat list the user owns. Each Category belongs to either Income or Spending; Transfers have none. "Other" is a Category; Unaccounted is not.
+An optional label for what a Transaction or Estimate was for or came from (e.g. food, transport), from a flat list the user builds up. Each Category belongs to either Income or Spending; Transfers have none. Income or Spending with no Category counts as Uncategorized, which is not a Category but is counted like one. Unaccounted is not a Category either.
 _Avoid_: Tag, type, subcategory
 
 **Transfer**:
@@ -47,7 +47,7 @@ _Avoid_: Discrepancy, miscellaneous, unknown
 ### Catching up
 
 **Estimate**:
-An approximate total of Income or Spending for one Category and Account across a Period. Exact Transactions inside it count toward that total, never on top of it.
+An approximate total of Income or Spending for one Category (or Uncategorized) and Account across a Period. Exact Transactions with the same Category, Account and Period count toward that total, never on top of it.
 _Avoid_: Guess, lump sum, approximation
 
 **Period**:
