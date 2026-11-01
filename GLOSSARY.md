@@ -29,7 +29,7 @@ _Avoid_: Move, top-up
 ### Where money sits
 
 **Account**:
-A real place money physically sits (e.g. a bank account, GCash, a savings pocket with its own Balance, cash in a wallet), with a Balance the user can check. Closed after a Balance check of zero; its history stays.
+A real place money physically sits (e.g. a bank account, GCash, a savings pocket with its own Balance, cash in a wallet), with a Balance the user can check. Never negative when checked, so a credit card or loan is not an Account. Closed by a final Balance check of zero that the user marks as closing (an Account merely at zero stays open); its history stays, and a later Balance check reopens it.
 _Avoid_: Basket, wallet, envelope, fund
 
 **Balance**:
@@ -37,7 +37,7 @@ How much money an Account holds: its latest Balance check plus every Transaction
 _Avoid_: Total, amount left
 
 **Balance check**:
-The user stating an Account's actual Balance on a date. It anchors the Balance; the first one sets the Account up.
+The user stating an Account's actual Balance on a date. It anchors the Balance; the first one sets the Account up, and nothing on that Account may be dated before it. On its own date it comes after whatever was logged before it and before whatever is logged after it.
 _Avoid_: Reconciliation, correction, sync, opening balance
 
 **Unaccounted**:
