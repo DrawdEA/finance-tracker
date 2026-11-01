@@ -1,6 +1,6 @@
 # Finance Tracker
 
-A single-user record of money coming in and going out, logged by chatting with Claude, that stays usable even after stretches of not tracking.
+A personal record, one per user, of money coming in and going out, logged by chatting with Claude, that stays usable even after stretches of not tracking.
 
 ## Language
 
