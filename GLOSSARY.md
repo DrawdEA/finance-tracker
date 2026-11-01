@@ -59,5 +59,5 @@ A run of days with no Transaction, Balance check or Estimate Period covering the
 _Avoid_: Missing days, lapse
 
 **Catch-up**:
-A chat flow that fills a Gap with Estimates.
+A chat flow that fills a Gap: it asks each Account's Balance now, then the Transfers and big Transactions, then rough Estimates for the rest, and leaves whatever the user skips as Unaccounted.
 _Avoid_: Backfill, reconciliation
