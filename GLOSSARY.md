@@ -33,17 +33,21 @@ A real place money physically sits (e.g. a bank account, GCash, cash in a wallet
 _Avoid_: Basket, wallet, envelope, fund
 
 **Balance**:
-How much money an Account holds: its opening amount plus every Transaction, Transfer and Estimate touching it.
+How much money an Account holds: its latest Balance check plus every Transaction, Transfer and Estimate since.
 _Avoid_: Total, amount left
 
 **Balance check**:
-The user stating an Account's actual Balance at a point in time; any difference from the tracked Balance becomes an Estimate.
-_Avoid_: Reconciliation, correction, sync
+The user stating an Account's actual Balance on a date. It anchors the Balance; the first one sets the Account up.
+_Avoid_: Reconciliation, correction, sync, opening balance
+
+**Unaccounted**:
+The part of an Account's change between two Balance checks that no Transaction, Transfer or Estimate explains.
+_Avoid_: Discrepancy, miscellaneous, unknown
 
 ### Catching up
 
 **Estimate**:
-An approximate amount of Income or Spending for one Category and Account across a Period, given when exact Transactions weren't logged.
+An approximate total of Income or Spending for one Category and Account across a Period. Exact Transactions inside it count toward that total, never on top of it.
 _Avoid_: Guess, lump sum, approximation
 
 **Period**:
@@ -51,7 +55,7 @@ The span of dates, start to end, that an Estimate covers.
 _Avoid_: Range, window
 
 **Gap**:
-The days since the user last logged that no Transaction or Estimate accounts for.
+A run of days with no Transaction, Balance check or Estimate Period covering them.
 _Avoid_: Missing days, lapse
 
 **Catch-up**:
