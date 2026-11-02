@@ -1,5 +1,4 @@
 import { isTimezone, todayIn } from "./format";
-import { ASK_ACCOUNTS } from "./hints";
 import { type Defaults, profile, type Result } from "./ledger";
 
 type Flow = "income" | "spending";
@@ -31,12 +30,7 @@ export async function setProfile(
 		.prepare("UPDATE users SET currency = ?, timezone = ? WHERE id = ?")
 		.bind(next.currency, next.timezone, userId)
 		.run();
-	const hasAccounts = await db.prepare("SELECT 1 FROM accounts WHERE user_id = ? LIMIT 1").bind(userId).first();
-	return {
-		ok: true,
-		summary: `Currency ${next.currency}, timezone ${next.timezone} (today is ${todayIn(next.timezone)}).`,
-		next: hasAccounts ? undefined : ASK_ACCOUNTS,
-	};
+	return { ok: true, summary: `Currency ${next.currency}, timezone ${next.timezone} (today is ${todayIn(next.timezone)}).` };
 }
 
 type Cat = { id: number; name: string; flow: Flow; hidden: number };
@@ -166,4 +160,14 @@ export async function deleteAccount(db: D1Database, userId: number, confirm: str
 	);
 	await signOut();
 	return { ok: true, summary: "Deleted the finance tracker account and all its data, and signed out. Using the tools again starts a fresh, empty account." };
+}
+
+/** Mark setup finished (step 5); until then every tool result sends the user back to it. */
+export async function completeSetup(db: D1Database, userId: number, defaults: Defaults): Promise<Result> {
+	const me = await profile(db, userId, defaults);
+	const hasAccount = await db.prepare("SELECT 1 FROM accounts WHERE user_id = ? LIMIT 1").bind(userId).first();
+	const missing = [!me.set && "currency and city (set_profile)", !hasAccount && "at least one Account (a balance_check)"].filter(Boolean);
+	if (missing.length) return { ok: false, error: `Setup still needs ${missing.join(" and ")}.` };
+	await db.prepare("UPDATE users SET onboarded_at = datetime('now') WHERE id = ? AND onboarded_at IS NULL").bind(userId).run();
+	return { ok: true, summary: "Setup complete." };
 }

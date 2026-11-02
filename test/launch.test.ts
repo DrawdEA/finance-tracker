@@ -99,17 +99,23 @@ describe("export (#24)", () => {
 });
 
 describe("guided onboarding", () => {
-	it("walks setup one step at a time and adds a starter set of Categories in one call", async () => {
-		const { setProfile, addCategories } = await import("../src/manage");
+	it("sends every finance call back to setup until complete_setup", async () => {
+		const { setProfile, addCategories, completeSetup } = await import("../src/manage");
+		const { setupNext } = await import("../src/ledger");
 		const user = await upsertUser(env.DB, "github", "onboarding-test");
-		expect((await status(env.DB, user, defaults)).ok && (await status(env.DB, user, defaults))).toMatchObject({ next: expect.stringMatching(/^New user.*Step 1 of 5/) });
-		expect(await setProfile(env.DB, user, defaults, { currency: "PHP", timezone: "Asia/Manila" })).toMatchObject({ next: expect.stringMatching(/step 2 of 5.*rough is fine/) });
-		expect(await record(env.DB, user, defaults, [check("GCash", 4750)])).toMatchObject({ next: expect.stringMatching(/step 4 of 5.*Categories/) });
+		const step = () => setupNext(env.DB, user, defaults);
+
+		expect(await step()).toMatch(/before anything else.*Step 1 of 5/);
+		expect(await completeSetup(env.DB, user, defaults)).toMatchObject({ ok: false, error: expect.stringMatching(/currency and city.*Account/) });
+		await record(env.DB, user, defaults, [{ kind: "spending", amount: 250, account: "GCash" }, check("GCash", 4500)]);
+		expect(await step()).toMatch(/Step 1 of 5/); // path B logged first; profile still missing
+		await setProfile(env.DB, user, defaults, { currency: "PHP", timezone: "Asia/Manila" });
+		expect(await step()).toMatch(/besides GCash.*Step 4 of 5/);
 		expect(await addCategories(env.DB, user, { names: ["Food", "Transport", "food"], flow: "spending" })).toMatchObject({
 			ok: true,
 			summary: "Added Food, Transport (spending). Skipped: Food already exists.",
 		});
-		const later = await setProfile(env.DB, user, defaults, { timezone: "Asia/Manila" });
-		expect(later.ok && later.next).toBeUndefined();
+		expect(await completeSetup(env.DB, user, defaults)).toMatchObject({ ok: true, summary: "Setup complete." });
+		expect(await step()).toBeUndefined();
 	});
 });

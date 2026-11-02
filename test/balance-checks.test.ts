@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { todayIn } from "../src/format";
-import { record, status } from "../src/ledger";
+import { record, setupNext, status } from "../src/ledger";
 import { setProfile } from "../src/manage";
 import { upsertUser } from "../src/utils";
 
@@ -27,27 +27,26 @@ async function overview() {
 }
 
 describe("first run", () => {
-	it("asks for currency, city and Accounts on an empty deployment", async () => {
-		const result = await overview();
-		expect(result.summary).toBe("No Accounts yet.");
-		expect(result.next).toMatch(/currency and city/);
+	it("starts setup with currency and city on an empty account", async () => {
+		expect((await overview()).summary).toBe("No Accounts yet.");
+		expect(await setupNext(env.DB, user, defaults)).toMatch(/Step 1 of 5.*currency and city/);
 	});
 
-	it("skips the currency question once a profile is set", async () => {
+	it("moves to where money sits once a profile is set", async () => {
 		await setProfile(env.DB, user, defaults, { currency: "PHP", timezone: "Asia/Manila" });
-		expect((await overview()).next).not.toMatch(/currency/);
+		expect(await setupNext(env.DB, user, defaults)).toMatch(/Step 2 of 5/);
 	});
 
-	it("sets up three Accounts in one call and explains how logging works", async () => {
+	it("sets up three Accounts in one call, then asks about other places and Categories", async () => {
+		await setProfile(env.DB, user, defaults, { currency: "PHP", timezone: "Asia/Manila" });
 		const result = await record(env.DB, user, defaults, [check("GCash", 4750), check("BPI", 20000), check("Cash", 800)]);
 		expect(result).toMatchObject({ ok: true, summary: "Set up GCash ₱4,750; set up BPI ₱20,000; set up Cash ₱800" });
 		expect(result.ok && result.ids).toHaveLength(3);
-		expect(result.ok && result.next).toMatch(/step 4 of 5/);
+		expect(await setupNext(env.DB, user, defaults)).toMatch(/besides BPI, Cash, GCash.*Step 4 of 5.*complete_setup/);
 
 		const after = await overview();
 		expect(after.summary).toBe("3 Accounts, ₱25,550 in all.");
 		expect(after.data.accounts.map((a) => `${a.name} ${a.balance}`)).toEqual(["BPI ₱20,000", "Cash ₱800", "GCash ₱4,750"]);
-		expect(after.next).toBeUndefined();
 	});
 });
 

@@ -11,7 +11,7 @@ export type Problem = { item: number; error: string; hint?: string };
 
 export type Defaults = { currency: string; timezone: string };
 
-export type Profile = { currency: string; timezone: string; set: boolean };
+export type Profile = { currency: string; timezone: string; set: boolean; onboarded: boolean };
 
 type Flow = "income" | "spending";
 
@@ -23,14 +23,32 @@ export type ItemInput =
 
 export async function profile(db: D1Database, userId: number, defaults: Defaults): Promise<Profile> {
 	const row = await db
-		.prepare("SELECT currency, timezone FROM users WHERE id = ?")
+		.prepare("SELECT currency, timezone, onboarded_at FROM users WHERE id = ?")
 		.bind(userId)
-		.first<{ currency: string | null; timezone: string | null }>();
+		.first<{ currency: string | null; timezone: string | null; onboarded_at: string | null }>();
 	return {
 		currency: row?.currency ?? defaults.currency,
 		timezone: row?.timezone ?? defaults.timezone,
 		set: Boolean(row?.currency && row?.timezone),
+		onboarded: Boolean(row?.onboarded_at),
 	};
+}
+
+/** The setup step to send the user back to, or undefined once setup is complete. */
+export async function setupNext(db: D1Database, userId: number, defaults: Defaults): Promise<string | undefined> {
+	const me = await profile(db, userId, defaults);
+	if (me.onboarded) return undefined;
+	if (!me.set) return hints.SETUP_PROFILE;
+	const { results } = await db
+		.prepare(
+			`SELECT a.name FROM accounts a WHERE a.user_id = ?1 AND NOT EXISTS (
+				SELECT 1 FROM items i WHERE i.account_id = a.id AND i.kind = 'balance_check' AND i.closes = 1
+				AND NOT EXISTS (SELECT 1 FROM items j WHERE j.account_id = a.id AND j.kind = 'balance_check' AND (j.date, j.id) > (i.date, i.id))
+			) ORDER BY a.name`,
+		)
+		.bind(userId)
+		.all<{ name: string }>();
+	return results.length === 0 ? hints.SETUP_ACCOUNTS : hints.setupRest(results.map((r) => r.name));
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +405,8 @@ export async function status(db: D1Database, userId: number, defaults: Defaults)
 	]);
 	const open = all.filter((a) => !a.closed);
 	const total = open.reduce((sum, a) => sum + a.balance, 0);
-	const next = all.length === 0 ? (me.set ? hints.ASK_ACCOUNTS : hints.ASK_PROFILE_AND_ACCOUNTS) : found ? hints.catchUp(found) : undefined;
+	// Setup steps override this in tools.ts until setup is complete.
+	const next = found && me.onboarded ? hints.catchUp(found) : undefined;
 	return {
 		ok: true,
 		summary:
@@ -425,7 +444,6 @@ export async function record(db: D1Database, userId: number, defaults: Defaults,
 		};
 	}
 	const ctx = await loadCtx(db, userId, me);
-	const firstSetup = ![...ctx.accounts.values()].some((a) => a.checks.length);
 	items.forEach((item, i) => {
 		if (item.kind === "balance_check") registerCheck(ctx, item.account, { date: item.date ?? ctx.today, seq: PENDING + i, closes: Boolean(item.close) });
 	});
@@ -477,7 +495,6 @@ export async function record(db: D1Database, userId: number, defaults: Defaults,
 			now +
 			(unaccountedLine ? ` · Unaccounted: ${unaccountedLine}` : ""),
 		ids: newIds.map((id) => `e${id}`),
-		next: firstSetup ? hints.AFTER_FIRST_SETUP : undefined,
 	};
 }
 
