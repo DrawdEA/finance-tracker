@@ -6,7 +6,7 @@
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
-		"cf-typegen": "wrangler types",
+		"cf-typegen": "wrangler types --strict-vars=false",
 		"type-check": "tsc --noEmit && tsc --noEmit -p test",
 		"test": "vitest run"
 	},
@@ -15,8 +15,6 @@
 		"@modelcontextprotocol/server": "2.3.1",
 		"agents": "^0.29.0",
 		"hono": "^4.12.27",
-		"just-pick": "^4.2.0",
-		"octokit": "^5.0.5",
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {

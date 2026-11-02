@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { amend, type Defaults, type Result, record, status } from "./ledger";
-import { addCategory, removeCategory, renameAccount, renameCategory, setProfile } from "./manage";
+import { addCategory, deleteAccount, removeCategory, renameAccount, renameCategory, setProfile } from "./manage";
 import { report } from "./report";
 
 function reply(result: Result) {
@@ -36,7 +36,25 @@ const item = z.discriminatedUnion("kind", [
 	}),
 ]);
 
-export function registerTools(server: McpServer, db: D1Database, userId: number, defaults: Defaults) {
+/** Per-user throttle (#21): past it, a friendly refusal instead of the call. */
+export async function throttled(limiter: RateLimit, userId: number, run: () => Promise<Result>): Promise<Result> {
+	const { success } = await limiter.limit({ key: String(userId) });
+	if (success) return run();
+	return { ok: false, error: "Too many finance tracker calls in the last minute.", hint: "Tell the user to wait a minute, then try again." };
+}
+
+export type Deps = {
+	db: D1Database;
+	userId: number;
+	defaults: Defaults;
+	limiter: RateLimit;
+	/** Revoke every grant this user holds, so the next call needs a fresh sign-in. */
+	signOut: () => Promise<void>;
+};
+
+export function registerTools(server: McpServer, { db, userId, defaults, limiter, signOut }: Deps) {
+	const guarded = async (run: () => Promise<Result>) => reply(await throttled(limiter, userId, run));
+
 	server.registerTool(
 		"finance_status",
 		{
@@ -45,7 +63,7 @@ export function registerTools(server: McpServer, db: D1Database, userId: number,
 			inputSchema: z.object({}),
 			annotations: { readOnlyHint: true, openWorldHint: false },
 		},
-		async () => reply(await status(db, userId, defaults)),
+		async () => guarded(() => status(db, userId, defaults)),
 	);
 
 	server.registerTool(
@@ -56,7 +74,7 @@ export function registerTools(server: McpServer, db: D1Database, userId: number,
 			inputSchema: z.object({ items: z.array(item).min(1).max(50) }),
 			annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
 		},
-		async ({ items }) => reply(await record(db, userId, defaults, items)),
+		async ({ items }) => guarded(() => record(db, userId, defaults, items)),
 	);
 
 	server.registerTool(
@@ -76,7 +94,7 @@ export function registerTools(server: McpServer, db: D1Database, userId: number,
 			}),
 			annotations: { readOnlyHint: true, openWorldHint: false },
 		},
-		async (input) => reply(await report(db, userId, defaults, input)),
+		async (input) => guarded(() => report(db, userId, defaults, input)),
 	);
 
 	server.registerTool(
@@ -108,37 +126,41 @@ export function registerTools(server: McpServer, db: D1Database, userId: number,
 			}),
 			annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 		},
-		async (input) => reply(await amend(db, userId, defaults, input)),
+		async (input) => guarded(() => amend(db, userId, defaults, input)),
 	);
 
 	server.registerTool(
 		"finance_manage",
 		{
 			description:
-				"Finance tracker settings. set_profile: currency (ISO code) and timezone (IANA name from their city, e.g. Manila → Asia/Manila); currency locks once anything is logged. add_category {name, flow}: only after the user agrees. rename_category / rename_account {name, new_name}. remove_category {name}: hidden if used, deleted if not. Accounts are created by a first balance_check and closed by a balance_check of 0 with close: true (finance_record).",
+				"Finance tracker settings. set_profile: currency (ISO code) and timezone (IANA name from their city, e.g. Manila → Asia/Manila); currency locks once anything is logged. add_category {name, flow}: only after the user agrees. rename_category / rename_account {name, new_name}. remove_category {name}: hidden if used, deleted if not. delete_account: permanently deletes ALL the user's data and signs them out; only when they ask, and call with confirm: \"DELETE\" only after they explicitly say yes to the warning. Privacy: /privacy on this server. Accounts are created by a first balance_check and closed by a balance_check of 0 with close: true (finance_record).",
 			inputSchema: z.object({
-				action: z.enum(["set_profile", "add_category", "rename_category", "remove_category", "rename_account"]),
+				action: z.enum(["set_profile", "add_category", "rename_category", "remove_category", "rename_account", "delete_account"]),
 				name: z.string().optional(),
 				new_name: z.string().optional(),
 				flow: flow.optional(),
 				currency: z.string().optional(),
 				timezone: z.string().optional(),
+				confirm: z.string().optional().describe('delete_account only: "DELETE", after the user explicitly said yes.'),
 			}),
 			annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
 		},
-		async (input) => {
-			switch (input.action) {
-				case "set_profile":
-					return reply(await setProfile(db, userId, defaults, input));
-				case "add_category":
-					return reply(await addCategory(db, userId, input));
-				case "rename_category":
-					return reply(await renameCategory(db, userId, input));
-				case "remove_category":
-					return reply(await removeCategory(db, userId, input));
-				case "rename_account":
-					return reply(await renameAccount(db, userId, input));
-			}
-		},
+		async (input) =>
+			guarded(async () => {
+				switch (input.action) {
+					case "set_profile":
+						return setProfile(db, userId, defaults, input);
+					case "add_category":
+						return addCategory(db, userId, input);
+					case "rename_category":
+						return renameCategory(db, userId, input);
+					case "remove_category":
+						return removeCategory(db, userId, input);
+					case "rename_account":
+						return renameAccount(db, userId, input);
+					case "delete_account":
+						return deleteAccount(db, userId, input.confirm, signOut);
+				}
+			}),
 	);
 }

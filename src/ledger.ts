@@ -411,8 +411,19 @@ export async function status(db: D1Database, userId: number, defaults: Defaults)
 	};
 }
 
+/** Soft cap on stored items per user (#21). */
+export const ITEM_CAP = 50_000;
+
 export async function record(db: D1Database, userId: number, defaults: Defaults, items: ItemInput[]): Promise<Result> {
 	const me = await profile(db, userId, defaults);
+	const stored = await db.prepare("SELECT count(*) AS n FROM items WHERE user_id = ?").bind(userId).first<{ n: number }>();
+	if (stored!.n + items.length > ITEM_CAP) {
+		return {
+			ok: false,
+			error: `This account has reached the limit of ${ITEM_CAP.toLocaleString("en")} logged items.`,
+			hint: "Tell the user nothing was saved; they can delete old items with finance_amend, or open an issue at github.com/DrawdEA/finance-tracker.",
+		};
+	}
 	const ctx = await loadCtx(db, userId, me);
 	const firstSetup = ![...ctx.accounts.values()].some((a) => a.checks.length);
 	items.forEach((item, i) => {

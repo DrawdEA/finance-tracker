@@ -438,6 +438,10 @@ export interface ApprovalDialogOptions {
 	 */
 	state: Record<string, any>;
 	/**
+	 * Sign-in providers, one submit button each; the chosen id is posted as `provider`
+	 */
+	providers: { id: string; label: string }[];
+	/**
 	 * CSRF token to include in the form
 	 */
 	csrfToken: string;
@@ -457,7 +461,7 @@ export interface ApprovalDialogOptions {
  * @returns A Response containing the HTML approval dialog
  */
 export function renderApprovalDialog(request: Request, options: ApprovalDialogOptions): Response {
-	const { client, server, state, csrfToken, setCookie } = options;
+	const { client, server, state, csrfToken, setCookie, providers } = options;
 
 	const encodedState = btoa(JSON.stringify(state));
 
@@ -758,7 +762,7 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
 				}
             </div>
 
-            <p>This MCP Client is requesting to be authorized on ${serverName}. If you approve, you will be redirected to complete authentication.</p>
+            <p>This MCP client wants access to your ${serverName}. Sign in to continue; a GitHub and a Google sign-in are separate accounts.</p>
 
             <form method="post" action="${new URL(request.url).pathname}">
               <input type="hidden" name="state" value="${encodedState}">
@@ -766,9 +770,15 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
 
               <div class="actions">
                 <button type="button" class="button button-secondary" onclick="window.history.back()">Cancel</button>
-                <button type="submit" class="button button-primary">Approve</button>
+                ${providers
+									.map(
+										(p) =>
+											`<button type="submit" name="provider" value="${sanitizeText(p.id)}" class="button button-primary">Continue with ${sanitizeText(p.label)}</button>`,
+									)
+									.join("")}
               </div>
             </form>
+            <p class="small"><a href="/privacy">Privacy</a></p>
           </div>
         </div>
       </body>
