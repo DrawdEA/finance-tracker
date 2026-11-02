@@ -1,0 +1,30 @@
+// The `next` hints in tool results. There's no claude.ai Skill (ADR 0003), so these
+// carry the onboarding (issue 10) and Catch-up (issue 9) scripts.
+
+import type { Gap } from "./queries";
+import { period } from "./format";
+
+export const ASK_PROFILE_AND_ACCOUNTS =
+	"New user, nothing set up yet. Handle nothing else first. In ONE short message, welcome them and ask: (1) their currency and city (for dates), and (2) where their money sits and how much is in each place right now, e.g. \"GCash 4,750, BPI 20k, wallet 800\". If they already mentioned a Transaction, ask for that Account's Balance \"right now, after that\". Then call finance_manage set_profile, then ONE finance_record call: any Transactions they mentioned first, then a balance_check per place (wallet or cash → \"Cash\"). Don't list Categories.";
+
+export const ASK_ACCOUNTS =
+	"No Accounts yet. Ask in ONE short message where their money sits and how much is in each place right now, e.g. \"GCash 4,750, BPI 20k, wallet 800\". If they already mentioned a Transaction, ask for that Account's Balance \"right now, after that\". Then ONE finance_record call: any Transactions they mentioned first, then a balance_check per place (wallet or cash → \"Cash\"). Don't list Categories.";
+
+export const AFTER_FIRST_SETUP =
+	"First Accounts are set up. Explain in at most 4 short bullets: log by just saying things like \"jeep 40\", \"salary 30k to bpi\", \"moved 2k bpi to gcash\"; Categories are optional and you'll suggest one when it fits; if they skip a few days you'll offer a quick Catch-up with rough totals; \"undo\" works anytime. Then ask if they spent anything today.";
+
+export function catchUp(gap: Gap): string {
+	const span = period(gap.from, gap.to);
+	return `Nothing logged ${span} (${gap.days} days). After handling what the user asked, offer a quick Catch-up ONCE this chat (~2 min); also if they say "catch up". If yes: (1) in one message ask every open Account's Balance right now, showing the Balance you have; then show how each changed. (2) Ask for Transfers and big one-offs in ${span} (salary, rent, bills), with dates if they know them, else ${gap.to}. (3) Per Account, ask once what the rest mostly went to (fine to skip); never walk through every Category. "The rest is X" means that Estimate takes whatever change is left, so Unaccounted is 0. (4) Show ONE summary: items, Estimates (~) over ${span}, Unaccounted per Account if not 0; ask once to save; offer to add any new Category in the same yes. (5) On yes: ONE finance_record call ordered Transfers, Income/Spending, Estimates (start ${gap.from}, end ${gap.to}), Balance checks LAST (dated today). "Just balances" → only the Balance checks. Skip an Account whose Balance they don't know.`;
+}
+
+const SUGGESTED = {
+	spending: "Food (eating out), Groceries, Transport, Bills (utilities, phone, internet, rent), Subscriptions, Shopping, Health, Fun, Gifts, Other",
+	income: "Salary, Side income, Allowance, Interest, Gifts, Other",
+};
+
+export function unknownCategory(flow: "income" | "spending", known: string[]): string {
+	return `Known ${flow} Categories: ${known.join(", ") || "none yet"}. Ask whether to add it (finance_manage add_category, then log again), use a known one, or log it without a Category. Suggested ${flow} Categories: ${SUGGESTED[flow]}.`;
+}
+
+export const UNKNOWN_ACCOUNT = "A new Account starts with a balance_check of what it holds now (it can go in the same finance_record call, after the Transactions). Never guess an Account; ask.";

@@ -57,3 +57,18 @@ export function isTimezone(value: string): boolean {
 		return false;
 	}
 }
+
+export function addDays(iso: string, days: number): string {
+	const date = new Date(`${iso}T00:00:00Z`);
+	date.setUTCDate(date.getUTCDate() + days);
+	return date.toISOString().slice(0, 10);
+}
+
+/** "2026-10-22", "2026-10-31" → "22–31 Oct"; across months "28 Sep–3 Oct". */
+export function period(start: string, end: string): string {
+	if (start === end) return day(start);
+	const [, , a] = day(start).split(" ");
+	const [, d2, b] = day(end).split(" ");
+	const d1 = String(Number(start.slice(8)));
+	return a === b ? `${d1}–${d2} ${b}` : `${d1} ${a}–${d2} ${b}`;
+}

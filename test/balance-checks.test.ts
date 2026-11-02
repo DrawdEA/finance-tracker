@@ -1,7 +1,8 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { todayIn } from "../src/format";
-import { record, setProfile, status } from "../src/ledger";
+import { record, status } from "../src/ledger";
+import { setProfile } from "../src/manage";
 import { upsertUser } from "../src/utils";
 
 const defaults = { currency: "PHP", timezone: "Asia/Manila" };
@@ -39,7 +40,7 @@ describe("first run", () => {
 
 	it("sets up three Accounts in one call and explains how logging works", async () => {
 		const result = await record(env.DB, user, defaults, [check("GCash", 4750), check("BPI", 20000), check("Cash", 800)]);
-		expect(result).toMatchObject({ ok: true, summary: "Set up GCash ₱4,750 · set up BPI ₱20,000 · set up Cash ₱800" });
+		expect(result).toMatchObject({ ok: true, summary: "Set up GCash ₱4,750; set up BPI ₱20,000; set up Cash ₱800" });
 		expect(result.ok && result.ids).toHaveLength(3);
 		expect(result.ok && result.next).toMatch(/at most 4 short bullets/);
 
@@ -61,7 +62,7 @@ describe("Balance checks", () => {
 	it("matches Account names case-insensitively", async () => {
 		await record(env.DB, user, defaults, [check("GCash", 1000)]);
 		const result = await record(env.DB, user, defaults, [check("gcash", 900)]);
-		expect(result).toMatchObject({ ok: true, summary: "Checked GCash ₱900" });
+		expect(result).toMatchObject({ ok: true, summary: "Checked GCash ₱900 · Unaccounted: GCash −₱100" });
 	});
 
 	it("closes an Account only at zero, and a later check reopens it", async () => {
