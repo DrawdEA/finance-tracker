@@ -198,6 +198,8 @@ for (const provider of Object.keys(UPSTREAMS) as Provider[]) {
 		const subject = await upstream.subject(token);
 
 		if (!isAllowed(c.env, `${provider}:${subject}`)) {
+			// Logged so the owner can add a tester to ALLOWED_USERS before sign-up opens.
+			console.log(`sign-in refused: ${provider}:${subject}`);
 			return c.text("Sign-up isn't open yet.", 403);
 		}
 		const userId = await upsertUser(c.env.DB, provider, subject);
