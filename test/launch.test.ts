@@ -99,23 +99,34 @@ describe("export (#24)", () => {
 });
 
 describe("guided onboarding", () => {
-	it("sends every finance call back to setup until complete_setup", async () => {
-		const { setProfile, addCategories, completeSetup } = await import("../src/manage");
+	it("walks the setup screens in order and finishes on setup_categories", async () => {
+		const { setProfile, setupCategories } = await import("../src/manage");
 		const { setupNext } = await import("../src/ledger");
 		const user = await upsertUser(env.DB, "github", "onboarding-test");
-		const step = () => setupNext(env.DB, user, defaults);
+		const screen = async () => (await setupNext(env.DB, user, defaults))?.say.split("\n").find((l) => l.startsWith("Step"));
 
-		expect(await step()).toMatch(/before anything else.*Step 1 of 5/);
-		expect(await completeSetup(env.DB, user, defaults)).toMatchObject({ ok: false, error: expect.stringMatching(/currency and city.*Account/) });
-		await record(env.DB, user, defaults, [{ kind: "spending", amount: 250, account: "GCash" }, check("GCash", 4500)]);
-		expect(await step()).toMatch(/Step 1 of 5/); // path B logged first; profile still missing
+		expect(await screen()).toBe("Step 1 of 3 · Currency and city");
+		expect(await setupCategories(env.DB, user, defaults, "starter")).toMatchObject({ ok: false, error: expect.stringMatching(/currency and city.*Account/) });
+		const logged = await record(env.DB, user, defaults, [{ kind: "spending", amount: 250, account: "GCash" }, check("GCash", 4500)]);
+		expect(logged.ok && logged.say).toBe("✓ Spent ₱250 from GCash\n✓ Set up GCash: ₱4,500");
+		expect(await screen()).toBe("Step 1 of 3 · Currency and city"); // path B logged first; profile still missing
 		await setProfile(env.DB, user, defaults, { currency: "PHP", timezone: "Asia/Manila" });
-		expect(await step()).toMatch(/besides GCash.*Step 4 of 5/);
+		expect(await screen()).toBe("Step 3 of 3 · Categories");
+
+		const done = await setupCategories(env.DB, user, defaults, "starter");
+		expect(done.ok && done.say).toMatch(/^Categories added\. You're all set!.*What have you spent today\?$/s);
+		expect(await setupNext(env.DB, user, defaults)).toBeUndefined();
+		expect(await status(env.DB, user, defaults)).toMatchObject({
+			data: { categories: { spending: ["Bills", "Food", "Fun", "Groceries", "Shopping", "Transport"], income: ["Salary"] } },
+		});
+	});
+
+	it("adds several Categories in one call", async () => {
+		const { addCategories } = await import("../src/manage");
+		const user = await upsertUser(env.DB, "github", "batch-categories");
 		expect(await addCategories(env.DB, user, { names: ["Food", "Transport", "food"], flow: "spending" })).toMatchObject({
 			ok: true,
 			summary: "Added Food, Transport (spending). Skipped: Food already exists.",
 		});
-		expect(await completeSetup(env.DB, user, defaults)).toMatchObject({ ok: true, summary: "Setup complete." });
-		expect(await step()).toBeUndefined();
 	});
 });

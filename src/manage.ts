@@ -1,4 +1,5 @@
 import { isTimezone, todayIn } from "./format";
+import { STARTER_CATEGORIES, setupDone } from "./hints";
 import { type Defaults, profile, type Result } from "./ledger";
 
 type Flow = "income" | "spending";
@@ -162,12 +163,24 @@ export async function deleteAccount(db: D1Database, userId: number, confirm: str
 	return { ok: true, summary: "Deleted the finance tracker account and all its data, and signed out. Using the tools again starts a fresh, empty account." };
 }
 
-/** Mark setup finished (step 5); until then every tool result sends the user back to it. */
-export async function completeSetup(db: D1Database, userId: number, defaults: Defaults): Promise<Result> {
+/** Setup's last screen: add the starter Categories or skip them, then mark setup done. */
+export async function setupCategories(db: D1Database, userId: number, defaults: Defaults, choice: string | undefined): Promise<Result> {
+	if (choice !== "starter" && choice !== "skip") return { ok: false, error: 'choice must be "starter" or "skip".' };
 	const me = await profile(db, userId, defaults);
 	const hasAccount = await db.prepare("SELECT 1 FROM accounts WHERE user_id = ? LIMIT 1").bind(userId).first();
 	const missing = [!me.set && "currency and city (set_profile)", !hasAccount && "at least one Account (a balance_check)"].filter(Boolean);
 	if (missing.length) return { ok: false, error: `Setup still needs ${missing.join(" and ")}.` };
-	await db.prepare("UPDATE users SET onboarded_at = datetime('now') WHERE id = ? AND onboarded_at IS NULL").bind(userId).run();
-	return { ok: true, summary: "Setup complete." };
+	const add = choice === "starter" ? (Object.entries(STARTER_CATEGORIES) as [Flow, string[]][]) : [];
+	await db.batch([
+		...add.flatMap(([flow, names]) =>
+			names.map((name) =>
+				db
+					.prepare("INSERT INTO categories (user_id, name, flow) VALUES (?, ?, ?) ON CONFLICT (user_id, flow, name) DO UPDATE SET hidden = 0")
+					.bind(userId, name, flow),
+			),
+		),
+		db.prepare("UPDATE users SET onboarded_at = datetime('now') WHERE id = ? AND onboarded_at IS NULL").bind(userId),
+	]);
+	const done = setupDone(choice === "starter", me.currency);
+	return { ok: true, summary: "Setup complete.", say: done.say, next: done.next };
 }

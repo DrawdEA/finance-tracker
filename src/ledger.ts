@@ -4,7 +4,7 @@ import { balances, gap, unaccountedAt } from "./queries";
 
 /** What a tool hands back to the model: a one-line summary, item ids, data and a next-step hint. */
 export type Result =
-	| { ok: true; summary: string; ids?: string[]; data?: unknown; next?: string }
+	| { ok: true; summary: string; say?: string; ids?: string[]; data?: unknown; next?: string }
 	| { ok: false; error: string; problems?: Problem[]; hint?: string };
 
 export type Problem = { item: number; error: string; hint?: string };
@@ -34,21 +34,13 @@ export async function profile(db: D1Database, userId: number, defaults: Defaults
 	};
 }
 
-/** The setup step to send the user back to, or undefined once setup is complete. */
-export async function setupNext(db: D1Database, userId: number, defaults: Defaults): Promise<string | undefined> {
+/** The setup screen to send the user back to, or undefined once setup is complete. */
+export async function setupNext(db: D1Database, userId: number, defaults: Defaults): Promise<hints.Screen | undefined> {
 	const me = await profile(db, userId, defaults);
 	if (me.onboarded) return undefined;
-	if (!me.set) return hints.SETUP_PROFILE;
-	const { results } = await db
-		.prepare(
-			`SELECT a.name FROM accounts a WHERE a.user_id = ?1 AND NOT EXISTS (
-				SELECT 1 FROM items i WHERE i.account_id = a.id AND i.kind = 'balance_check' AND i.closes = 1
-				AND NOT EXISTS (SELECT 1 FROM items j WHERE j.account_id = a.id AND j.kind = 'balance_check' AND (j.date, j.id) > (i.date, i.id))
-			) ORDER BY a.name`,
-		)
-		.bind(userId)
-		.all<{ name: string }>();
-	return results.length === 0 ? hints.SETUP_ACCOUNTS : hints.setupRest(results.map((r) => r.name));
+	if (!me.set) return hints.SETUP_WELCOME;
+	const hasAccount = await db.prepare("SELECT 1 FROM accounts WHERE user_id = ? LIMIT 1").bind(userId).first();
+	return hasAccount ? hints.SETUP_CATEGORIES : hints.setupMoney(me.currency);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +87,26 @@ export function describe(it: Describable, currency: string): string {
 			return `Estimate ~${amount} ${it.flow} · ${it.category ?? "Uncategorized"} · ${it.account} · ${period(it.start_date!, it.date)}${note}`;
 		case "balance_check":
 			return it.closes ? `Closed ${it.account} · ${day(it.date)}` : `Balance check ${it.account} ${amount} · ${day(it.date)}`;
+	}
+}
+
+/** One confirmation line the app shows: "✓ Spent ₱40 on Transport from GCash · jeep". */
+function sayLine(it: Describable & { newAccount?: boolean }, currency: string, today: string): string {
+	const amount = money(it.amount, currency);
+	const tail = `${it.note ? ` · ${it.note}` : ""}${it.date === today ? "" : ` · ${day(it.date)}`}`;
+	const category = it.category ? ` on ${it.category}` : "";
+	switch (it.kind) {
+		case "income":
+			return `✓ Received ${amount}${it.category ? ` ${it.category}` : ""} into ${it.account}${tail}`;
+		case "spending":
+			return `✓ Spent ${amount}${category} from ${it.account}${tail}`;
+		case "transfer":
+			return `✓ Moved ${amount} from ${it.account} to ${it.to_account}${tail}`;
+		case "estimate":
+			return `✓ About ${amount}${category || " uncategorized"} ${it.flow === "income" ? "into" : "from"} ${it.account} over ${period(it.start_date!, it.date)}`;
+		case "balance_check":
+			if (it.closes) return `✓ Closed ${it.account}`;
+			return `✓ ${it.newAccount ? "Set up" : "Checked"} ${it.account}: ${amount}${it.date === today ? "" : ` · ${day(it.date)}`}`;
 	}
 }
 
@@ -373,12 +385,23 @@ async function itemsOfAccounts(db: D1Database, userId: number, accountIds: numbe
 	return results;
 }
 
-/** Balances of the given Accounts, for "Now: GCash ₱4,500". */
-async function nowLine(db: D1Database, userId: number, names: Set<string>, currency: string): Promise<string> {
-	if (names.size === 0) return "";
+/** Balances of the given open Accounts: ["GCash ₱4,500", …]. */
+async function nowBalances(db: D1Database, userId: number, names: Set<string>, currency: string): Promise<string[]> {
+	if (names.size === 0) return [];
 	const all = await balances(db, userId);
-	const touched = all.filter((a) => names.has(key(a.name)) && !a.closed);
-	return touched.length ? ` · Now: ${touched.map((a) => `${a.name} ${money(a.balance, currency)}`).join(", ")}` : "";
+	return all.filter((a) => names.has(key(a.name)) && !a.closed).map((a) => `${a.name} ${money(a.balance, currency)}`);
+}
+
+/** ["Balance: GCash ₱4,500"] for a say, or [] when nothing to show. */
+async function balanceLine(db: D1Database, userId: number, names: Set<string>, currency: string): Promise<string[]> {
+	const list = await nowBalances(db, userId, names, currency);
+	return list.length ? [`${list.length === 1 ? "Balance" : "Balances"}: ${list.join(" · ")}`] : [];
+}
+
+/** " · Now: GCash ₱4,500" for summaries. */
+async function nowLine(db: D1Database, userId: number, names: Set<string>, currency: string): Promise<string> {
+	const list = await nowBalances(db, userId, names, currency);
+	return list.length ? ` · Now: ${list.join(", ")}` : "";
 }
 
 const DELETE_ORPHANS = (db: D1Database, userId: number) => [
@@ -394,7 +417,7 @@ const DELETE_ORPHANS = (db: D1Database, userId: number) => [
 export async function status(db: D1Database, userId: number, defaults: Defaults): Promise<Result> {
 	const me = await profile(db, userId, defaults);
 	const today = todayIn(me.timezone);
-	const [all, categories, recent, found] = await Promise.all([
+	const [all, categories, recent, found, usage] = await Promise.all([
 		balances(db, userId),
 		db
 			.prepare("SELECT name, flow FROM categories WHERE user_id = ? AND hidden = 0 ORDER BY name")
@@ -402,9 +425,21 @@ export async function status(db: D1Database, userId: number, defaults: Defaults)
 			.all<{ name: string; flow: string }>(),
 		db.prepare(`${ITEM_SELECT} WHERE i.user_id = ? ORDER BY i.id DESC LIMIT 5`).bind(userId).all<ItemRow>(),
 		gap(db, userId, today),
+		// Spending per Account over the last 60 days, for the default Account.
+		db
+			.prepare(
+				`SELECT a.name, COUNT(i.id) AS n, MIN(f.id) AS first FROM accounts a
+				LEFT JOIN items i ON i.account_id = a.id AND i.kind = 'spending' AND i.date >= ?2
+				LEFT JOIN items f ON f.account_id = a.id
+				WHERE a.user_id = ?1 GROUP BY a.id ORDER BY n DESC, first ASC`,
+			)
+			.bind(userId, addDays(today, -60))
+			.all<{ name: string }>(),
 	]);
 	const open = all.filter((a) => !a.closed);
 	const total = open.reduce((sum, a) => sum + a.balance, 0);
+	const openNames = new Set(open.map((a) => a.name));
+	const defaultAccount = usage.results.find((u) => openNames.has(u.name))?.name;
 	// Setup steps override this in tools.ts until setup is complete.
 	const next = found && me.onboarded ? hints.catchUp(found) : undefined;
 	return {
@@ -418,6 +453,7 @@ export async function status(db: D1Database, userId: number, defaults: Defaults)
 			currency: me.set ? me.currency : "not set yet",
 			timezone: me.set ? me.timezone : "not set yet",
 			accounts: open.map((a) => ({ name: a.name, balance: money(a.balance, me.currency), last_check: a.lastCheck })),
+			...(defaultAccount && { default_account: defaultAccount }),
 			closed_accounts: all.filter((a) => a.closed).map((a) => a.name),
 			categories: {
 				spending: categories.results.filter((c) => c.flow === "spending").map((c) => c.name),
@@ -479,9 +515,17 @@ export async function record(db: D1Database, userId: number, defaults: Defaults,
 	const newIds = results.slice(firstItem).map((r) => r.results[0].id);
 
 	// Balances of Accounts that Transactions moved, and Unaccounted at each new Balance check.
-	const moved = new Set(rows.filter((r) => r.kind !== "balance_check").flatMap((r) => [key(r.account), ...(r.to_account ? [key(r.to_account)] : [])]));
+	// An Account checked in this call already shows its Balance on the check's line.
+	const checked = new Set(rows.filter((r) => r.kind === "balance_check").map((r) => key(r.account)));
+	const moved = new Set(
+		rows
+			.filter((r) => r.kind !== "balance_check")
+			.flatMap((r) => [key(r.account), ...(r.to_account ? [key(r.to_account)] : [])])
+			.filter((name) => !checked.has(name)),
+	);
 	const checkIds = newIds.filter((_, i) => rows[i].kind === "balance_check");
-	const [now, unaccounted] = await Promise.all([nowLine(db, userId, moved, me.currency), unaccountedAt(db, userId, checkIds)]);
+	const [nowList, unaccounted] = await Promise.all([nowBalances(db, userId, moved, me.currency), unaccountedAt(db, userId, checkIds)]);
+	const now = nowList.length ? ` · Now: ${nowList.join(", ")}` : "";
 	const unaccountedLine = checkIds
 		.map((id) => [rows[newIds.indexOf(id)].account, unaccounted.get(id) ?? 0] as const)
 		.filter(([, amount]) => amount !== 0)
@@ -494,6 +538,11 @@ export async function record(db: D1Database, userId: number, defaults: Defaults,
 			capitalize(rows.map((r) => phrase(r, me.currency, ctx.today)).join("; ")) +
 			now +
 			(unaccountedLine ? ` · Unaccounted: ${unaccountedLine}` : ""),
+		say: [
+			...rows.map((r) => sayLine(r, me.currency, ctx.today)),
+			...(nowList.length ? [`${nowList.length === 1 ? "Balance" : "Balances"}: ${nowList.join(" · ")}`] : []),
+			...(unaccountedLine ? [`Unaccounted since the last check: ${unaccountedLine}`] : []),
+		].join("\n"),
 		ids: newIds.map((id) => `e${id}`),
 	};
 }
@@ -562,6 +611,10 @@ async function remove(db: D1Database, userId: number, me: Profile, rows: ItemRow
 	return {
 		ok: true,
 		summary: `${verb} ${rows.length} item${rows.length === 1 ? "" : "s"}${await nowLine(db, userId, touched, me.currency)}`,
+		say: [
+			...rows.map((r) => `✓ ${verb}: ${sayLine(r, me.currency, todayIn(me.timezone)).slice(2)}`),
+			...(await balanceLine(db, userId, touched, me.currency)),
+		].join("\n"),
 		data: { removed: rows.map((r) => `e${r.id} ${describe(r, me.currency)}`) },
 	};
 }
@@ -618,6 +671,7 @@ async function edit(db: D1Database, userId: number, me: Profile, rawId: string, 
 	return {
 		ok: true,
 		summary: `Changed e${id}: ${describe(row, me.currency)}${await nowLine(db, userId, touched, me.currency)}`,
+		say: [`✓ Updated: ${sayLine(row, me.currency, todayIn(me.timezone)).slice(2)}`, ...(await balanceLine(db, userId, touched, me.currency))].join("\n"),
 		data: { before: describe(old, me.currency) },
 	};
 }

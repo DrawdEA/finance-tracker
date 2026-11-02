@@ -29,20 +29,20 @@ async function overview() {
 describe("first run", () => {
 	it("starts setup with currency and city on an empty account", async () => {
 		expect((await overview()).summary).toBe("No Accounts yet.");
-		expect(await setupNext(env.DB, user, defaults)).toMatch(/Step 1 of 5.*currency and city/);
+		expect((await setupNext(env.DB, user, defaults))?.say).toMatch(/^Welcome to Finance Tracker!.*Step 1 of 3 · Currency and city/s);
 	});
 
 	it("moves to where money sits once a profile is set", async () => {
 		await setProfile(env.DB, user, defaults, { currency: "PHP", timezone: "Asia/Manila" });
-		expect(await setupNext(env.DB, user, defaults)).toMatch(/Step 2 of 5/);
+		expect((await setupNext(env.DB, user, defaults))?.say).toMatch(/^Step 2 of 3 · Your money/);
 	});
 
-	it("sets up three Accounts in one call, then asks about other places and Categories", async () => {
+	it("sets up three Accounts in one call, then asks about Categories", async () => {
 		await setProfile(env.DB, user, defaults, { currency: "PHP", timezone: "Asia/Manila" });
 		const result = await record(env.DB, user, defaults, [check("GCash", 4750), check("BPI", 20000), check("Cash", 800)]);
 		expect(result).toMatchObject({ ok: true, summary: "Set up GCash ₱4,750; set up BPI ₱20,000; set up Cash ₱800" });
 		expect(result.ok && result.ids).toHaveLength(3);
-		expect(await setupNext(env.DB, user, defaults)).toMatch(/besides BPI, Cash, GCash.*Step 4 of 5.*complete_setup/);
+		expect((await setupNext(env.DB, user, defaults))?.say).toMatch(/^Step 3 of 3 · Categories/);
 
 		const after = await overview();
 		expect(after.summary).toBe("3 Accounts, ₱25,550 in all.");

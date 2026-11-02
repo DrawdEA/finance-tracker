@@ -11,6 +11,19 @@ npx wrangler d1 migrations apply DB --local
 npm run dev                      # http://localhost:8788/mcp
 ```
 
+### Conversation tests
+
+`test/e2e/` runs the real tools locally for one fixed test user (no sign-in) and drives headless Claude against them, to check how chats actually read:
+
+```bash
+npx wrangler d1 migrations apply DB --local -c test/e2e/wrangler.jsonc
+npx wrangler dev -c test/e2e/wrangler.jsonc        # http://localhost:8790/mcp
+curl localhost:8790/reset                          # wipe the test user
+python3 test/e2e/turn.py new "lunch 250 gcash"     # prints tool calls, say, reply, session id
+python3 test/e2e/turn.py <session> "php, manila"   # next turn
+test/e2e/call.sh finance_status '{}'               # one raw tool call
+```
+
 Run `npm run cf-typegen` after changing `wrangler.jsonc`, and `npm run type-check` before pushing.
 
 ## Deploying

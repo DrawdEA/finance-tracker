@@ -4,16 +4,61 @@
 import type { Gap } from "./queries";
 import { period } from "./format";
 
-// Setup runs until finance_manage complete_setup. Every tool result carries the current step
-// (tools.ts), so any finance chat goes back to setup until it's done.
-const FIRST = "Setup isn't finished, so finish it before anything else, one short question per message; keep any Transaction the user mentioned and log it in the finance_record call below. Only Accounts and settings that finance tools return exist: never fill them in from memory or other tools (Todoist, notes); ask.";
+// Setup is a fixed sequence of screens, like an app's: the server owns the copy (`say`), and
+// Claude shows it as written. Every tool result carries the current screen until setup is done
+// (tools.ts), so any finance chat goes back to setup first.
 
-export const SETUP_PROFILE = `${FIRST} Step 1 of 5: welcome them in one line (they log money just by chatting with you), then ask their currency and city (for dates); if you think you know, confirm it ("PHP and Manila?") rather than assume. Call finance_manage set_profile only with their answer; its result has the next step.`;
+export type Screen = { say: string; next: string };
 
-export const SETUP_ACCOUNTS = `${FIRST} Step 2 of 5: ask where their money sits, names only (bank accounts, e-wallets like GCash or Maya, cash). Step 3 of 5: ask roughly how much is in each right now; rough is fine, they can skip any they don't know. Then ONE finance_record call: any Transaction they mentioned first, then a balance_check per place (wallet or cash → "Cash"). Its result has the next step.`;
+const RULES =
+	"Setup isn't finished: show `say` to the user exactly as written, before anything else, and wait for their answer. Never fill in settings or Accounts from memory or other tools (Todoist, notes); only what they tell you counts. If they mentioned a Transaction before setup, say once (first screen only): \"I'll log that once you're set up.\", and log it in the setup finance_record call.";
 
-export function setupRest(accounts: string[]): string {
-	return `Setup isn't finished. After handling the user's request, continue it now, one short question per message. Step 3b: ask whether money sits anywhere besides ${accounts.join(", ")} (the only Accounts so far; don't name others from memory or other tools); add each with a balance_check (rough is fine). Step 4 of 5: ask once whether they want Categories, to see where money goes; if yes, propose a short starter set that fits them, from: Food (eating out), Groceries, Transport, Bills, Subscriptions, Shopping, Health, Fun; income: Salary, Side income; add what they agree to with ONE finance_manage add_category call (names, flow). Step 5 of 5: explain in at most 3 short bullets: log by just saying things like "jeep 40", "salary 30k to bpi", "moved 2k bpi to gcash"; skipped days get a quick Catch-up; "undo" works anytime. Then call finance_manage complete_setup, and ask what they've spent today.`;
+export const STARTER_CATEGORIES = {
+	spending: ["Food", "Groceries", "Transport", "Bills", "Shopping", "Fun"],
+	income: ["Salary"],
+};
+
+export const SETUP_WELCOME: Screen = {
+	say: `Welcome to Finance Tracker! Before anything else, let's get you set up. It takes about a minute.
+
+Step 1 of 3 · Currency and city
+What currency do you use, and which city are you in? (e.g. "PHP, Manila")`,
+	next: `${RULES} On their answer, call finance_manage set_profile (ISO currency; IANA timezone from the city). Its result has the next screen.`,
+};
+
+/** Examples in the user's own terms: Philippine accounts for PHP, generic ones otherwise. */
+function examples(currency: string) {
+	return currency === "PHP"
+		? { money: "GCash 4,750, BPI 20k, cash 800", logs: ['"jeep 40"', '"salary 30k to BPI"', '"moved 2k BPI to GCash"'] }
+		: { money: "checking 3,200, savings 10k, cash 80", logs: ['"coffee 5"', '"paycheck 2k to checking"', '"moved 500 checking to savings"'] };
+}
+
+export function setupMoney(currency: string): Screen {
+	return {
+		say: `Step 2 of 3 · Your money
+Where do you keep money, and roughly how much is in each right now? Rough is fine. (e.g. "${examples(currency).money}")`,
+		next: `${RULES} On their answer, make ONE finance_record call: any Transaction they mentioned first, then a balance_check per place (wallet or cash → "Cash"; amounts like 20k → 20000). Its result has the next screen.`,
+	};
+}
+
+export const SETUP_CATEGORIES: Screen = {
+	say: `Step 3 of 3 · Categories
+Want to sort your money into categories? I'll start you with ${STARTER_CATEGORIES.spending.join(", ")}, plus ${STARTER_CATEGORIES.income.join(", ")} for income. They're optional, and you can change them anytime.
+Reply "yes" or "skip".`,
+	next: `${RULES} On their answer, call finance_manage setup_categories with choice "starter" (yes, sure, ok) or "skip" (no, skip). If they name their own Categories, use choice "starter" only if they agreed to the set, then add theirs with add_category.`,
+};
+
+export function setupDone(added: boolean, currency: string): Screen {
+	return {
+		say: `${added ? "Categories added. " : ""}You're all set! Here's how it works:
+• Just tell me what happened: ${examples(currency).logs.join(", ")}
+• Ask anything: "how much did I spend this week?"
+• Missed a few days? I'll help you catch up with rough totals
+• Made a mistake? Say "undo"
+
+What have you spent today?`,
+		next: "Show `say` exactly as written, ending on its last question. If the user asked something before setup, answer it in one short line BEFORE `say`. If they mentioned a Transaction during setup that isn't logged yet, log it now and confirm it in one line before `say`.",
+	};
 }
 
 export function catchUp(gap: Gap): string {

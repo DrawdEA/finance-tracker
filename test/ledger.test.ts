@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { addDays, todayIn } from "../src/format";
 import { amend, type ItemInput, type Result, record, status } from "../src/ledger";
-import { addCategory, completeSetup, removeCategory, renameAccount, renameCategory, setProfile } from "../src/manage";
+import { addCategory, removeCategory, renameAccount, renameCategory, setProfile, setupCategories } from "../src/manage";
 import { report } from "../src/report";
 import { upsertUser } from "../src/utils";
 
@@ -173,7 +173,7 @@ describe("Estimates, Unaccounted and Gap (#14)", () => {
 		await record(env.DB, other, defaults, [check("GCash", 1000, addDays(today, -4))]);
 		expect(ok(await status(env.DB, other, defaults)).next).toBeUndefined(); // setup comes first
 		await setProfile(env.DB, other, defaults, { currency: "PHP", timezone: "Asia/Manila" });
-		await completeSetup(env.DB, other, defaults);
+		await setupCategories(env.DB, other, defaults, "skip");
 		const result = ok(await status(env.DB, other, defaults));
 		expect(result.data.gap).toEqual({ from: addDays(today, -3), to: addDays(today, -1), days: 3 });
 		expect(result.next).toMatch(/Catch-up/);

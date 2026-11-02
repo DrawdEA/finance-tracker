@@ -1,0 +1,10 @@
+// Local conversation-test harness only (wrangler dev --local); never deployed.
+{
+	"name": "finance-tracker-e2e",
+	"main": "worker.ts",
+	"compatibility_date": "2026-10-01",
+	"compatibility_flags": ["nodejs_compat"],
+	"vars": { "DEFAULT_TIMEZONE": "Asia/Manila", "DEFAULT_CURRENCY": "PHP" },
+	"d1_databases": [{ "binding": "DB", "database_name": "finance-tracker-e2e", "database_id": "e2e-local", "migrations_dir": "../../migrations" }],
+	"dev": { "port": 8790 }
+}
