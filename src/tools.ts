@@ -50,9 +50,11 @@ export type Deps = {
 	limiter: RateLimit;
 	/** Revoke every grant this user holds, so the next call needs a fresh sign-in. */
 	signOut: () => Promise<void>;
+	/** A 15-minute download link to the user's CSV export. */
+	exportLink: () => Promise<string>;
 };
 
-export function registerTools(server: McpServer, { db, userId, defaults, limiter, signOut }: Deps) {
+export function registerTools(server: McpServer, { db, userId, defaults, limiter, signOut, exportLink }: Deps) {
 	const guarded = async (run: () => Promise<Result>) => reply(await throttled(limiter, userId, run));
 
 	server.registerTool(
@@ -133,9 +135,9 @@ export function registerTools(server: McpServer, { db, userId, defaults, limiter
 		"finance_manage",
 		{
 			description:
-				"Finance tracker settings. set_profile: currency (ISO code) and timezone (IANA name from their city, e.g. Manila → Asia/Manila); currency locks once anything is logged. add_category {name, flow}: only after the user agrees. rename_category / rename_account {name, new_name}. remove_category {name}: hidden if used, deleted if not. delete_account: permanently deletes ALL the user's data and signs them out; only when they ask, and call with confirm: \"DELETE\" only after they explicitly say yes to the warning. Privacy: /privacy on this server. Accounts are created by a first balance_check and closed by a balance_check of 0 with close: true (finance_record).",
+				"Finance tracker settings. set_profile: currency (ISO code) and timezone (IANA name from their city, e.g. Manila → Asia/Manila); currency locks once anything is logged. add_category {name, flow}: only after the user agrees. rename_category / rename_account {name, new_name}. remove_category {name}: hidden if used, deleted if not. delete_account: permanently deletes ALL the user's data and signs them out; only when they ask, and call with confirm: \"DELETE\" only after they explicitly say yes to the warning. export: a 15-minute download link to a CSV of everything logged. Privacy: /privacy on this server. Accounts are created by a first balance_check and closed by a balance_check of 0 with close: true (finance_record).",
 			inputSchema: z.object({
-				action: z.enum(["set_profile", "add_category", "rename_category", "remove_category", "rename_account", "delete_account"]),
+				action: z.enum(["set_profile", "add_category", "rename_category", "remove_category", "rename_account", "delete_account", "export"]),
 				name: z.string().optional(),
 				new_name: z.string().optional(),
 				flow: flow.optional(),
@@ -160,6 +162,12 @@ export function registerTools(server: McpServer, { db, userId, defaults, limiter
 						return renameAccount(db, userId, input);
 					case "delete_account":
 						return deleteAccount(db, userId, input.confirm, signOut);
+					case "export":
+						return {
+							ok: true,
+							summary: `CSV of everything logged, link valid 15 minutes: ${await exportLink()}`,
+							next: "Give the user the link as-is; it downloads a CSV (one row per item) and expires in 15 minutes.",
+						};
 				}
 			}),
 	);

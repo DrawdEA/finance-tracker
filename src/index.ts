@@ -3,6 +3,7 @@ import OAuthProvider, { getOAuthApi, type OAuthProviderOptions } from "@cloudfla
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler, getMcpAuthContext } from "agents/mcp/server";
 import { AuthHandler } from "./auth-handler";
+import { createExportLink } from "./export";
 import { registerTools } from "./tools";
 import { identity, isAllowed, type Props, upsertUser } from "./utils";
 
@@ -24,6 +25,7 @@ function createServer() {
 			const { items } = await oauth.listUserGrants(String(userId));
 			await Promise.all(items.map((grant) => oauth.revokeGrant(grant.id, String(userId))));
 		},
+		exportLink: () => createExportLink(env.OAUTH_KV, userId, new URL(env.MCP_RESOURCE).origin),
 	});
 	return server;
 }

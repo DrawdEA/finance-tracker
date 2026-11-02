@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
+import { exportCsv, exportUserId } from "./export";
 import { PRIVACY_HTML } from "./privacy";
 import { isAllowed, type Props, type Provider, upsertUser } from "./utils";
 import {
@@ -70,6 +71,19 @@ const UPSTREAMS: Record<Provider, Upstream> = {
 const enabled = () => (Object.keys(UPSTREAMS) as Provider[]).filter((p) => UPSTREAMS[p].clientId() && UPSTREAMS[p].clientSecret());
 
 app.get("/privacy", (c) => c.html(PRIVACY_HTML));
+
+app.get("/export/:token", async (c) => {
+	const userId = await exportUserId(c.env.OAUTH_KV, c.req.param("token"));
+	if (!userId) return c.text("This export link has expired. Ask Claude for a new one.", 404);
+	const csv = await exportCsv(c.env.DB, userId, { currency: c.env.DEFAULT_CURRENCY, timezone: c.env.DEFAULT_TIMEZONE });
+	return new Response(csv, {
+		headers: {
+			"Content-Type": "text/csv; charset=utf-8",
+			"Content-Disposition": `attachment; filename="finance-tracker-${new Date().toISOString().slice(0, 10)}.csv"`,
+			"Cache-Control": "no-store",
+		},
+	});
+});
 
 app.get("/authorize", async (c) => {
 	const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);

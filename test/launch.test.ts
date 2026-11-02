@@ -81,3 +81,19 @@ describe("sign-up and abuse limits (#21)", () => {
 		expect(await record(env.DB, user, defaults, [check("GCash", 5)])).toMatchObject({ ok: false, error: expect.stringMatching(/limit of 50,000/) });
 	});
 });
+
+describe("export (#24)", () => {
+	it("serves one CSV of everything through a short-lived link", async () => {
+		const { createExportLink } = await import("../src/export");
+		const user = await upsertUser(env.DB, "github", "export-test");
+		await record(env.DB, user, defaults, [check("GCash", 100), { kind: "spending", amount: 12.5, account: "GCash", note: 'Jollibee, "large"' }]);
+		const link = await createExportLink(env.OAUTH_KV, user, "https://example.com");
+		const res = await SELF.fetch(link);
+		expect(res.headers.get("Content-Type")).toMatch(/text\/csv/);
+		const rows = (await res.text()).trim().split("\r\n");
+		expect(rows[0]).toBe("id,kind,date,start_date,amount,currency,flow,account,to_account,category,note,closes_account");
+		expect(rows).toHaveLength(3);
+		expect(rows[2]).toMatch(/,spending,.*,12\.50,PHP,,GCash,,,"Jollibee, ""large""",$/);
+		expect((await SELF.fetch("https://example.com/export/nope")).status).toBe(404);
+	});
+});
