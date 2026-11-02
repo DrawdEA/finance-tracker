@@ -2,34 +2,21 @@ import { env } from "cloudflare:workers";
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler, getMcpAuthContext } from "agents/mcp/server";
-import { z } from "zod";
 import { GitHubHandler } from "./github-handler";
+import { registerTools } from "./tools";
 import { type Props, upsertUser } from "./utils";
 
 function createServer() {
 	const server = new McpServer({
 		name: "finance-tracker",
-		version: "0.0.1",
+		version: "0.1.0",
 	});
-	const props = getMcpAuthContext()?.props as Props | undefined;
-
-	server.registerTool(
-		"echo",
-		{
-			description:
-				"Echo a message back from the finance tracker server, with the signed-in GitHub login and server time. Use to test the connector.",
-			inputSchema: z.object({ message: z.string() }),
-		},
-		async ({ message }) => ({
-			content: [
-				{
-					text: `echo: ${message}\nuser: ${props?.login} (#${props?.userId})\nserver time: ${new Date().toISOString()}`,
-					type: "text",
-				},
-			],
-		}),
-	);
-
+	// apiHandler guarantees props and props.userId before this runs.
+	const props = getMcpAuthContext()?.props as Props;
+	registerTools(server, env.DB, props.userId!, {
+		currency: env.DEFAULT_CURRENCY,
+		timezone: env.DEFAULT_TIMEZONE,
+	});
 	return server;
 }
 
