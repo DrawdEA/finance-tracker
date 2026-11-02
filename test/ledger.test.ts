@@ -43,7 +43,7 @@ describe("Income, Spending and Transfers (#13)", () => {
 
 	it("path B: Spending, then a first Balance check, in one batch", async () => {
 		const result = ok(await log(spend(250, "GCash"), check("GCash", 4500)));
-		expect(result.next).toMatch(/at most 4 short bullets/);
+		expect(result.next).toMatch(/step 4 of 5/);
 		expect(await balanceOf("GCash")).toBe("₱4,500");
 	});
 

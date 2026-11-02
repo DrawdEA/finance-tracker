@@ -42,7 +42,7 @@ describe("first run", () => {
 		const result = await record(env.DB, user, defaults, [check("GCash", 4750), check("BPI", 20000), check("Cash", 800)]);
 		expect(result).toMatchObject({ ok: true, summary: "Set up GCash ₱4,750; set up BPI ₱20,000; set up Cash ₱800" });
 		expect(result.ok && result.ids).toHaveLength(3);
-		expect(result.ok && result.next).toMatch(/at most 4 short bullets/);
+		expect(result.ok && result.next).toMatch(/step 4 of 5/);
 
 		const after = await overview();
 		expect(after.summary).toBe("3 Accounts, ₱25,550 in all.");

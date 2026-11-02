@@ -1,4 +1,5 @@
 import { isTimezone, todayIn } from "./format";
+import { ASK_ACCOUNTS } from "./hints";
 import { type Defaults, profile, type Result } from "./ledger";
 
 type Flow = "income" | "spending";
@@ -30,7 +31,12 @@ export async function setProfile(
 		.prepare("UPDATE users SET currency = ?, timezone = ? WHERE id = ?")
 		.bind(next.currency, next.timezone, userId)
 		.run();
-	return { ok: true, summary: `Currency ${next.currency}, timezone ${next.timezone} (today is ${todayIn(next.timezone)}).` };
+	const hasAccounts = await db.prepare("SELECT 1 FROM accounts WHERE user_id = ? LIMIT 1").bind(userId).first();
+	return {
+		ok: true,
+		summary: `Currency ${next.currency}, timezone ${next.timezone} (today is ${todayIn(next.timezone)}).`,
+		next: hasAccounts ? undefined : ASK_ACCOUNTS,
+	};
 }
 
 type Cat = { id: number; name: string; flow: Flow; hidden: number };
@@ -62,6 +68,18 @@ function cleanName(name: string | undefined): string | Result {
 	if (!clean) return { ok: false, error: "Give a name." };
 	if (clean.length > 40) return { ok: false, error: "Names are at most 40 characters." };
 	return clean;
+}
+
+/** add_category with one name or several (a starter set during setup). */
+export async function addCategories(db: D1Database, userId: number, input: { name?: string; names?: string[]; flow?: Flow }): Promise<Result> {
+	const names = input.names?.length ? input.names : [input.name ?? ""];
+	if (names.length === 1) return addCategory(db, userId, { name: names[0], flow: input.flow });
+	const results = [];
+	for (const name of names) results.push(await addCategory(db, userId, { name, flow: input.flow }));
+	const done = results.filter((r) => r.ok).map((r) => (r as { summary: string }).summary.replace(/ \((income|spending)\)\.$/, "").replace(/^(Added|Brought back) /, ""));
+	const failed = results.filter((r) => !r.ok).map((r) => (r as { error: string }).error);
+	if (done.length === 0) return { ok: false, error: failed.join(" ") };
+	return { ok: true, summary: `Added ${done.join(", ")} (${input.flow}).${failed.length ? ` Skipped: ${failed.join(" ")}` : ""}` };
 }
 
 export async function addCategory(db: D1Database, userId: number, input: { name?: string; flow?: Flow }): Promise<Result> {

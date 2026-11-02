@@ -5,13 +5,12 @@ import type { Gap } from "./queries";
 import { period } from "./format";
 
 export const ASK_PROFILE_AND_ACCOUNTS =
-	"New user, nothing set up yet. Handle nothing else first. In ONE short message, welcome them and ask: (1) their currency and city (for dates), and (2) where their money sits and how much is in each place right now, e.g. \"GCash 4,750, BPI 20k, wallet 800\". If they already mentioned a Transaction, ask for that Account's Balance \"right now, after that\". Then call finance_manage set_profile, then ONE finance_record call: any Transactions they mentioned first, then a balance_check per place (wallet or cash → \"Cash\"). Don't list Categories.";
+	"New user: run setup step by step before anything else, one short question per message. Step 1 of 5: welcome them in one line (they log money just by chatting with you), then ask their currency and city (for dates). If they already mentioned a Transaction, keep it for step 3. Then call finance_manage set_profile; its result has the next step.";
 
 export const ASK_ACCOUNTS =
-	"No Accounts yet. Ask in ONE short message where their money sits and how much is in each place right now, e.g. \"GCash 4,750, BPI 20k, wallet 800\". If they already mentioned a Transaction, ask for that Account's Balance \"right now, after that\". Then ONE finance_record call: any Transactions they mentioned first, then a balance_check per place (wallet or cash → \"Cash\"). Don't list Categories.";
+	"Setup step 2 of 5: ask where their money sits, names only (bank accounts, e-wallets like GCash or Maya, cash). Step 3 of 5: ask roughly how much is in each right now; rough is fine, they can skip any they don't know and add places later. Then ONE finance_record call: any Transaction they already mentioned first, then a balance_check per place (wallet or cash → \"Cash\"). Its result has the next step.";
 
-export const AFTER_FIRST_SETUP =
-	"First Accounts are set up. Explain in at most 4 short bullets: log by just saying things like \"jeep 40\", \"salary 30k to bpi\", \"moved 2k bpi to gcash\"; Categories are optional and you'll suggest one when it fits; if they skip a few days you'll offer a quick Catch-up with rough totals; \"undo\" works anytime. Then ask if they spent anything today.";
+export const AFTER_FIRST_SETUP = `Setup step 4 of 5: ask once whether they want Categories, to see where money goes. If yes, propose a short starter set that fits them, from: Food (eating out), Groceries, Transport, Bills, Subscriptions, Shopping, Health, Fun; income: Salary, Side income; add what they agree to with ONE finance_manage add_category call (names, flow). If no, fine; don't offer again this chat. Step 5 of 5: explain in at most 3 short bullets: log by just saying things like "jeep 40", "salary 30k to bpi", "moved 2k bpi to gcash"; skipped days get a quick Catch-up; "undo" works anytime. Then ask what they've spent today (or confirm the Transaction already logged).`;
 
 export function catchUp(gap: Gap): string {
 	const span = period(gap.from, gap.to);

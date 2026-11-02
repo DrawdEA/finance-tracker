@@ -97,3 +97,19 @@ describe("export (#24)", () => {
 		expect((await SELF.fetch("https://example.com/export/nope")).status).toBe(404);
 	});
 });
+
+describe("guided onboarding", () => {
+	it("walks setup one step at a time and adds a starter set of Categories in one call", async () => {
+		const { setProfile, addCategories } = await import("../src/manage");
+		const user = await upsertUser(env.DB, "github", "onboarding-test");
+		expect((await status(env.DB, user, defaults)).ok && (await status(env.DB, user, defaults))).toMatchObject({ next: expect.stringMatching(/^New user.*Step 1 of 5/) });
+		expect(await setProfile(env.DB, user, defaults, { currency: "PHP", timezone: "Asia/Manila" })).toMatchObject({ next: expect.stringMatching(/step 2 of 5.*rough is fine/) });
+		expect(await record(env.DB, user, defaults, [check("GCash", 4750)])).toMatchObject({ next: expect.stringMatching(/step 4 of 5.*Categories/) });
+		expect(await addCategories(env.DB, user, { names: ["Food", "Transport", "food"], flow: "spending" })).toMatchObject({
+			ok: true,
+			summary: "Added Food, Transport (spending). Skipped: Food already exists.",
+		});
+		const later = await setProfile(env.DB, user, defaults, { timezone: "Asia/Manila" });
+		expect(later.ok && later.next).toBeUndefined();
+	});
+});
