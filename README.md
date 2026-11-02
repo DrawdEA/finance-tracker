@@ -1,6 +1,6 @@
 # finance-tracker
 
-Chat-first personal finance tracker: log money by talking to Claude, through a remote MCP server on Cloudflare Workers + D1. Add `https://finance-tracker.edwardjoshua-diesta.workers.dev/mcp` as a custom connector on claude.ai. [Privacy](https://finance-tracker.edwardjoshua-diesta.workers.dev/privacy). Domain language: [GLOSSARY.md](GLOSSARY.md); decisions: [docs/adr/](docs/adr/).
+Chat-first personal finance tracker: log money by talking to Claude, through a remote MCP server on Cloudflare Workers + D1. A personal server for its owner only (ADR 0004): the code is open, the deployment is not. Domain language: [GLOSSARY.md](GLOSSARY.md); decisions: [docs/adr/](docs/adr/).
 
 ## Local dev
 
@@ -30,13 +30,10 @@ Run `npm run cf-typegen` after changing `wrangler.jsonc`, and `npm run type-chec
 
 Every push to `main` runs [.github/workflows/deploy.yml](.github/workflows/deploy.yml): type-check, apply D1 migrations (`migrations/`), then `wrangler deploy`. It needs the repo secret `CLOUDFLARE_API_TOKEN` (Workers Scripts: Edit, D1: Edit, Workers KV Storage: Edit, on the account in `wrangler.jsonc`).
 
-Worker secrets (`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY`, and optionally `GOOGLE_CLIENT_SECRET`) live on the Worker, not in the repo; set them once with `wrangler secret put`.
-
-## Sign-in and sign-up
-
-- **Providers:** GitHub (OAuth app, callback `/callback`) and Google (OAuth client, redirect URI `/callback/google`, scopes `openid email`). Google is offered once `GOOGLE_CLIENT_ID` (var) and `GOOGLE_CLIENT_SECRET` (secret) are set. A GitHub and a Google sign-in are separate users (ADR 0003).
-- **Who can sign in:** `SIGNUP` is `allowlist` (only `ALLOWED_USERS`, comma-separated `provider:id`) until the account is on Workers Paid; then set it to `open`.
-- **Limits:** 60 tool calls a minute per user (`RATE_LIMITER`), 50,000 stored items per user.
-- **Deleting:** users say "delete my finance tracker account"; `finance_manage delete_account` hard-deletes their rows and revokes their grants.
+Worker secrets (`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY`) live on the Worker, not in the repo; set them once with `wrangler secret put`.
 
 New schema: add a numbered file to `migrations/`; CI applies it before the deploy.
+
+## Sign-in
+
+GitHub OAuth (callback `/callback`), limited to `ALLOWED_USERS` in `wrangler.jsonc` (comma-separated `provider:id`; the owner's numeric GitHub id).

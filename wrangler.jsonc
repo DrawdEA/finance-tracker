@@ -11,12 +11,8 @@
 	"vars": {
 		// Exact URL pasted into claude.ai; every token is bound to it.
 		"MCP_RESOURCE": "https://finance-tracker.edwardjoshua-diesta.workers.dev/mcp",
-		// "allowlist" until Workers Paid is on (#23); then "open" lets anyone sign up (#21).
-		"SIGNUP": "allowlist",
-		// Who may sign in while SIGNUP is "allowlist": comma-separated provider:id.
+		// Personal server (ADR 0004): who may sign in, comma-separated provider:id.
 		"ALLOWED_USERS": "github:99942301",
-		// Google OAuth client (public); Google sign-in is offered once this and the GOOGLE_CLIENT_SECRET secret are set.
-		"GOOGLE_CLIENT_ID": "",
 		// Defaults for users who haven't set their own (ADR 0003).
 		"DEFAULT_TIMEZONE": "Asia/Manila",
 		"DEFAULT_CURRENCY": "PHP"
@@ -25,14 +21,6 @@
 		{
 			"binding": "OAUTH_KV",
 			"id": "57ffcefb1df4488b84497a599ab57947"
-		}
-	],
-	// Per-user tool calls: 60 a minute (#21).
-	"ratelimits": [
-		{
-			"name": "RATE_LIMITER",
-			"namespace_id": "1001",
-			"simple": { "limit": 60, "period": 60 }
 		}
 	],
 	"observability": {

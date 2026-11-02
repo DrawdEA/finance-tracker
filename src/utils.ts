@@ -1,4 +1,4 @@
-export type Provider = "github" | "google";
+export type Provider = "github";
 
 // Context from the auth process, encrypted & stored in the auth token
 // and provided to MCP handlers through getMcpAuthContext()
@@ -6,9 +6,9 @@ export type Props = {
 	// Internal users.id; missing on grants issued before the users table existed.
 	userId?: number;
 	provider?: Provider;
-	// The provider's immutable user id (GitHub numeric id, Google `sub`).
+	// The provider's immutable user id (GitHub's numeric id).
 	subject?: string;
-	// Grants issued before Google sign-in carry only this.
+	// Older grants carry only this.
 	githubId?: number;
 };
 
@@ -17,9 +17,8 @@ export function identity(props: Props): string {
 	return props.provider ? `${props.provider}:${props.subject}` : `github:${props.githubId}`;
 }
 
-/** Sign-up is open, or this identity is on ALLOWED_USERS (comma-separated "provider:id"). */
-export function isAllowed(env: Pick<Env, "SIGNUP" | "ALLOWED_USERS">, id: string): boolean {
-	if (env.SIGNUP === "open") return true;
+/** Personal server (ADR 0004): only identities on ALLOWED_USERS (comma-separated "provider:id") get in. */
+export function isAllowed(env: Pick<Env, "ALLOWED_USERS">, id: string): boolean {
 	return env.ALLOWED_USERS.split(",").map((s) => s.trim()).includes(id);
 }
 

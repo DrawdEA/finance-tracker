@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { amend, type Defaults, type Result, record, setupNext, status } from "./ledger";
-import { addCategories, deleteAccount, removeCategory, renameAccount, renameCategory, setProfile, setupCategories } from "./manage";
+import { addCategories, removeCategory, renameAccount, renameCategory, setProfile, setupCategories } from "./manage";
 import { report } from "./report";
 
 function reply(result: Result) {
@@ -36,30 +36,20 @@ const item = z.discriminatedUnion("kind", [
 	}),
 ]);
 
-/** Per-user throttle (#21): past it, a friendly refusal instead of the call. */
-export async function throttled(limiter: RateLimit, userId: number, run: () => Promise<Result>): Promise<Result> {
-	const { success } = await limiter.limit({ key: String(userId) });
-	if (success) return run();
-	return { ok: false, error: "Too many finance tracker calls in the last minute.", hint: "Tell the user to wait a minute, then try again." };
-}
-
 export type Deps = {
 	db: D1Database;
 	userId: number;
 	defaults: Defaults;
-	limiter: RateLimit;
-	/** Revoke every grant this user holds, so the next call needs a fresh sign-in. */
-	signOut: () => Promise<void>;
 	/** A 15-minute download link to the user's CSV export. */
 	exportLink: () => Promise<string>;
 };
 
 const SETUP_PROMPT = "Set up my finance tracker. Walk me through it step by step.";
 
-export function registerTools(server: McpServer, { db, userId, defaults, limiter, signOut, exportLink }: Deps) {
+export function registerTools(server: McpServer, { db, userId, defaults, exportLink }: Deps) {
 	// Until setup is complete, every result sends the user back to the current setup step.
 	const guarded = async (run: () => Promise<Result>) => {
-		const result = await throttled(limiter, userId, run);
+		const result = await run();
 		if (!result.ok) return reply(result);
 		const setup = await setupNext(db, userId, defaults);
 		if (!setup) return reply(result);
@@ -152,16 +142,15 @@ export function registerTools(server: McpServer, { db, userId, defaults, limiter
 		"finance_manage",
 		{
 			description:
-				"Finance tracker settings. set_profile: currency (ISO code) and timezone (IANA name from their city, e.g. Manila → Asia/Manila); currency locks once anything is logged. add_category {name or names[], flow}: only after the user agrees. rename_category / rename_account {name, new_name}. remove_category {name}: hidden if used, deleted if not. delete_account: permanently deletes ALL the user's data and signs them out; only when they ask, and call with confirm: \"DELETE\" only after they explicitly say yes to the warning. export: a 15-minute download link to a CSV of everything logged. setup_categories {choice}: only on setup's Categories screen. Privacy: /privacy on this server. Accounts are created by a first balance_check and closed by a balance_check of 0 with close: true (finance_record).",
+				"Finance tracker settings. set_profile: currency (ISO code) and timezone (IANA name from their city, e.g. Manila → Asia/Manila); currency locks once anything is logged. add_category {name or names[], flow}: only after the user agrees. rename_category / rename_account {name, new_name}. remove_category {name}: hidden if used, deleted if not. export: a 15-minute download link to a CSV of everything logged. setup_categories {choice}: only on setup's Categories screen. Accounts are created by a first balance_check and closed by a balance_check of 0 with close: true (finance_record).",
 			inputSchema: z.object({
-				action: z.enum(["set_profile", "add_category", "rename_category", "remove_category", "rename_account", "delete_account", "export", "setup_categories"]),
+				action: z.enum(["set_profile", "add_category", "rename_category", "remove_category", "rename_account", "export", "setup_categories"]),
 				name: z.string().optional(),
 				names: z.array(z.string()).optional().describe("add_category only: several at once."),
 				new_name: z.string().optional(),
 				flow: flow.optional(),
 				currency: z.string().optional(),
 				timezone: z.string().optional(),
-				confirm: z.string().optional().describe('delete_account only: "DELETE", after the user explicitly said yes.'),
 				choice: z.enum(["starter", "skip"]).optional().describe("setup_categories only."),
 			}),
 			annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -179,8 +168,6 @@ export function registerTools(server: McpServer, { db, userId, defaults, limiter
 						return removeCategory(db, userId, input);
 					case "rename_account":
 						return renameAccount(db, userId, input);
-					case "delete_account":
-						return deleteAccount(db, userId, input.confirm, signOut);
 					case "setup_categories":
 						return setupCategories(db, userId, defaults, input.choice);
 					case "export":

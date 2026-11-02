@@ -14,8 +14,6 @@ const mcpHandler = createMcpHandler(() => {
 		db: env.DB,
 		userId,
 		defaults: { currency: env.DEFAULT_CURRENCY, timezone: env.DEFAULT_TIMEZONE },
-		limiter: { limit: async () => ({ success: true }) } as RateLimit,
-		signOut: async () => {},
 		exportLink: async () => "https://example.com/export/test",
 	});
 	return server;

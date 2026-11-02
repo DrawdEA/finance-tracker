@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
 import { exportCsv, exportUserId } from "./export";
-import { PRIVACY_HTML } from "./privacy";
 import { isAllowed, type Props, type Provider, upsertUser } from "./utils";
 import {
 	bindStateToSession,
@@ -45,32 +44,9 @@ const UPSTREAMS: Record<Provider, Upstream> = {
 			return String(((await res.json()) as { id: number }).id);
 		},
 	},
-	google: {
-		label: "Google",
-		authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-		tokenUrl: "https://oauth2.googleapis.com/token",
-		scope: "openid email",
-		callback: "/callback/google",
-		clientId: () => env.GOOGLE_CLIENT_ID || undefined,
-		clientSecret: () => env.GOOGLE_CLIENT_SECRET || undefined,
-		async subject(token) {
-			// The id_token comes straight from Google's token endpoint over TLS, so its claims can be trusted (OIDC 3.1.3.7).
-			const payload = JSON.parse(atob(token.id_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as {
-				sub: string;
-				aud: string;
-				iss: string;
-			};
-			if (payload.aud !== env.GOOGLE_CLIENT_ID || !["accounts.google.com", "https://accounts.google.com"].includes(payload.iss)) {
-				throw new Error("Google id_token isn't for this app");
-			}
-			return payload.sub;
-		},
-	},
 };
 
 const enabled = () => (Object.keys(UPSTREAMS) as Provider[]).filter((p) => UPSTREAMS[p].clientId() && UPSTREAMS[p].clientSecret());
-
-app.get("/privacy", (c) => c.html(PRIVACY_HTML));
 
 app.get("/export/:token", async (c) => {
 	const userId = await exportUserId(c.env.OAUTH_KV, c.req.param("token"));
@@ -96,7 +72,7 @@ app.get("/authorize", async (c) => {
 		csrfToken,
 		providers: enabled().map((id) => ({ id, label: UPSTREAMS[id].label })),
 		server: {
-			description: "Track your money by chatting with Claude.",
+			description: "Personal finance tracker.",
 			logo: `${new URL(c.req.url).origin}/favicon.ico`,
 			name: "Finance Tracker",
 		},
@@ -149,7 +125,7 @@ app.post("/authorize", async (c) => {
 });
 
 /**
- * OAuth callback from GitHub or Google: exchange the code, look up the provider's
+ * OAuth callback from GitHub: exchange the code, look up the provider's
  * immutable user id, gate it, and hand the MCP client a token for our internal user.
  *
  * SECURITY: validateOAuthState checks the state is in KV (we created it) and matches
@@ -198,9 +174,7 @@ for (const provider of Object.keys(UPSTREAMS) as Provider[]) {
 		const subject = await upstream.subject(token);
 
 		if (!isAllowed(c.env, `${provider}:${subject}`)) {
-			// Logged so the owner can add a tester to ALLOWED_USERS before sign-up opens.
-			console.log(`sign-in refused: ${provider}:${subject}`);
-			return c.text("Sign-up isn't open yet.", 403);
+			return c.text("This is a personal server; only its owner can sign in.", 403);
 		}
 		const userId = await upsertUser(c.env.DB, provider, subject);
 

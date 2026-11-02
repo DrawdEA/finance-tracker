@@ -762,7 +762,7 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
 				}
             </div>
 
-            <p>This MCP client wants access to your ${serverName}. Sign in to continue; a GitHub and a Google sign-in are separate accounts.</p>
+            <p>This MCP client wants access to your ${serverName}. Sign in to continue.</p>
 
             <form method="post" action="${new URL(request.url).pathname}">
               <input type="hidden" name="state" value="${encodedState}">
@@ -778,7 +778,6 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
 									.join("")}
               </div>
             </form>
-            <p class="small"><a href="/privacy">Privacy</a></p>
           </div>
         </div>
       </body>

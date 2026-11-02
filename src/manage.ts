@@ -141,28 +141,6 @@ export async function renameAccount(db: D1Database, userId: number, input: { nam
 	return { ok: true, summary: `Renamed ${account.name} to ${name}.` };
 }
 
-/** Hard-delete every row this user owns, then revoke their sign-in (#22). */
-export async function deleteAccount(db: D1Database, userId: number, confirm: string | undefined, signOut: () => Promise<void>): Promise<Result> {
-	if (confirm !== "DELETE") {
-		const counts = await db
-			.prepare("SELECT (SELECT count(*) FROM items WHERE user_id = ?1) AS items, (SELECT count(*) FROM accounts WHERE user_id = ?1) AS accounts")
-			.bind(userId)
-			.first<{ items: number; accounts: number }>();
-		return {
-			ok: false,
-			error: "Not deleted: needs the user's explicit yes.",
-			hint: `Warn the user plainly: this permanently deletes everything (${counts!.items} logged items across ${counts!.accounts} Accounts, plus Categories and settings), can't be undone, and signs them out. Only if they clearly say yes, call again with confirm: "DELETE".`,
-		};
-	}
-	await db.batch(
-		["items", "batches", "categories", "accounts"]
-			.map((table) => db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(userId))
-			.concat(db.prepare("DELETE FROM users WHERE id = ?").bind(userId)),
-	);
-	await signOut();
-	return { ok: true, summary: "Deleted the finance tracker account and all its data, and signed out. Using the tools again starts a fresh, empty account." };
-}
-
 /** Setup's last screen: add the starter Categories or skip them, then mark setup done. */
 export async function setupCategories(db: D1Database, userId: number, defaults: Defaults, choice: string | undefined): Promise<Result> {
 	if (choice !== "starter" && choice !== "skip") return { ok: false, error: 'choice must be "starter" or "skip".' };

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import OAuthProvider, { getOAuthApi, type OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
+import OAuthProvider, { type OAuthProviderOptions } from "@cloudflare/workers-oauth-provider";
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler, getMcpAuthContext } from "agents/mcp/server";
 import { AuthHandler } from "./auth-handler";
@@ -19,12 +19,6 @@ function createServer() {
 		db: env.DB,
 		userId,
 		defaults: { currency: env.DEFAULT_CURRENCY, timezone: env.DEFAULT_TIMEZONE },
-		limiter: env.RATE_LIMITER,
-		signOut: async () => {
-			const oauth = getOAuthApi(options, env);
-			const { items } = await oauth.listUserGrants(String(userId));
-			await Promise.all(items.map((grant) => oauth.revokeGrant(grant.id, String(userId))));
-		},
 		exportLink: () => createExportLink(env.OAUTH_KV, userId, new URL(env.MCP_RESOURCE).origin),
 	});
 	return server;
