@@ -415,8 +415,8 @@ export async function status(db: D1Database, userId: number, defaults: Defaults)
 				: `${open.length} Account${open.length === 1 ? "" : "s"}, ${money(total, me.currency)} in all.`,
 		data: {
 			today: `${today} (${day(today).split(" ")[0]})`,
-			currency: me.currency,
-			timezone: me.timezone,
+			currency: me.set ? me.currency : "not set yet",
+			timezone: me.set ? me.timezone : "not set yet",
 			accounts: open.map((a) => ({ name: a.name, balance: money(a.balance, me.currency), last_check: a.lastCheck })),
 			closed_accounts: all.filter((a) => a.closed).map((a) => a.name),
 			categories: {
