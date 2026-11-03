@@ -2,6 +2,12 @@
 	"name": "finance-tracker",
 	"version": "0.0.1",
 	"private": true,
+	"description": "Track your money by chatting with Claude: a remote MCP server on Cloudflare Workers + D1",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/DrawdEA/finance-tracker"
+	},
 	"scripts": {
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
